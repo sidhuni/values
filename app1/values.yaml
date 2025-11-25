@@ -40,7 +40,6 @@ config:
   FEATURE_FLAG: "true"
 
 probes:
-  enabled: true
   liveness:
     path: /
     port: http
