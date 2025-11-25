@@ -2,57 +2,48 @@ replicaCount: 2
 
 image:
   repository: nginx
-  tag: "1.24.0"
-  pullPolicy: IfNotPresent
+  tag: "1.27"
 
 service:
   type: ClusterIP
   port: 80
-  targetPort: 80
 
 ingress:
   enabled: true
-  className: ""
-  host: app1.example.com
-  annotations: {}
-
-resources:
-  limits:
-    cpu: "500m"
-    memory: "512Mi"
-  requests:
-    cpu: "250m"
-    memory: "256Mi"
-
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 5
-  targetCPUUtilizationPercentage: 70
-  targetMemoryUtilizationPercentage: 80
-
-serviceAccount:
-  create: true
-  name: ""
+  className: nginx
+  hosts:
+    - host: app1.local
+      paths:
+        - path: /
+          pathType: Prefix
 
 config:
-  LOG_LEVEL: info
+  LOG_LEVEL: debug
   FEATURE_FLAG: "true"
 
-probes:
+hpa:
   enabled: true
-  liveness:
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 60
+
+readiness:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  httpGet:
     path: /
     port: http
-    initialDelaySeconds: 15
-    periodSeconds: 10
-  readiness:
+
+liveness:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  httpGet:
     path: /
     port: http
-    initialDelaySeconds: 5
-    periodSeconds: 5
-  startup:
+
+startup:
+  initialDelaySeconds: 3
+  periodSeconds: 10
+  httpGet:
     path: /
     port: http
-    failureThreshold: 30
-    periodSeconds: 10

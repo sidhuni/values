@@ -1,58 +1,49 @@
 replicaCount: 2
 
 image:
-  repository: busybox
-  tag: "1.36"
-  pullPolicy: IfNotPresent
+  repository: node
+  tag: "20-alpine"
 
 service:
   type: ClusterIP
-  port: 80
-  targetPort: 80
+  port: 3000
 
 ingress:
   enabled: true
-  className: ""
-  host: app5.example.com
-  annotations: {}
-
-resources:
-  limits:
-    cpu: "250m"
-    memory: "256Mi"
-  requests:
-    cpu: "100m"
-    memory: "128Mi"
-
-autoscaling:
-  enabled: true
-  minReplicas: 1
-  maxReplicas: 4
-  targetCPUUtilizationPercentage: 75
-  targetMemoryUtilizationPercentage: 80
-
-serviceAccount:
-  create: true
-  name: ""
+  className: nginx
+  hosts:
+    - host: app5.local
+      paths:
+        - path: /
+          pathType: Prefix
 
 config:
   LOG_LEVEL: info
-  SPECIAL_MODE: "on"
+  FEATURE_FLAG: "true"
 
-probes:
+hpa:
   enabled: true
-  liveness:
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 65
+
+readiness:
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  httpGet:
     path: /
     port: http
-    initialDelaySeconds: 10
-    periodSeconds: 10
-  readiness:
+
+liveness:
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  httpGet:
     path: /
     port: http
-    initialDelaySeconds: 5
-    periodSeconds: 5
-  startup:
+
+startup:
+  initialDelaySeconds: 3
+  periodSeconds: 10
+  httpGet:
     path: /
     port: http
-    failureThreshold: 30
-    periodSeconds: 10
