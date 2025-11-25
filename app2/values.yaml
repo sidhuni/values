@@ -1,0 +1,57 @@
+replicaCount: 1
+
+image:
+  repository: gcr.io/distroless/static
+  tag: "nonroot"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+
+resources:
+  limits:
+    cpu: "200m"
+    memory: "256Mi"
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+serviceAccount:
+  create: true
+  name: ""
+
+config:
+  LOG_LEVEL: debug
+
+probes:
+  enabled: true
+  liveness:
+    path: /
+    port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  readiness:
+    path: /
+    port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  startup:
+    path: /
+    port: http
+    failureThreshold: 30
+    periodSeconds: 10
