@@ -1,49 +1,51 @@
-replicaCount: 2
-
-image:
-  repository: nginx
-  tag: "1.27"
-
-service:
-  type: ClusterIP
-  port: 80
-
-ingress:
+your-chart:
   enabled: true
-  className: nginx
-  hosts:
-    - host: app1.local
-      paths:
-        - path: /
-          pathType: Prefix
+  replicaCount: 2
 
-config:
-  LOG_LEVEL: debug
-  FEATURE_FLAG: "true"
+  image:
+    repository: nginx
+    tag: "1.27"
 
-hpa:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 6
-  targetCPUUtilizationPercentage: 60
+  service:
+    type: ClusterIP
+    port: 80
 
-readiness:
-  initialDelaySeconds: 5
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: app1.local
+        paths:
+          - path: /
+            pathType: Prefix
 
-liveness:
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  config:
+    LOG_LEVEL: debug
+    FEATURE_FLAG: "true"
 
-startup:
-  initialDelaySeconds: 3
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 60
+
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
+
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
+
+  startup:
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
