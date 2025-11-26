@@ -3,8 +3,8 @@ your-chart:
   replicaCount: 3
 
   image:
-    repository: busybox
-    tag: "latest"
+    repository: httpd
+    tag: "2.4"
     pullPolicy: IfNotPresent
 
   service:

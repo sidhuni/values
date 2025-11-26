@@ -21,30 +21,30 @@ your-chart:
 
   config:
     LOG_LEVEL: info
-    FEATURE_FLAG: "true"
+    FEATURE_FLAG: "false"
 
   hpa:
     enabled: true
     minReplicas: 2
-    maxReplicas: 8
-    targetCPUUtilizationPercentage: 65
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 60
 
   readiness:
-    initialDelaySeconds: 5
+    initialDelaySeconds: 6
     periodSeconds: 10
     httpGet:
       path: /
       port: http
 
   liveness:
-    initialDelaySeconds: 10
+    initialDelaySeconds: 7
     periodSeconds: 10
     httpGet:
       path: /
       port: http
 
   startup:
-    initialDelaySeconds: 3
+    initialDelaySeconds: 5
     periodSeconds: 10
     httpGet:
       path: /

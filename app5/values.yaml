@@ -3,8 +3,8 @@ your-chart:
   replicaCount: 2
 
   image:
-    repository: node
-    tag: "20-alpine"
+    repository: httpd
+    tag: "2.4"
 
   service:
     type: ClusterIP
