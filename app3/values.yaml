@@ -2,51 +2,51 @@ your-chart:
   enabled: true
   replicaCount: 3
 
-image:
-  repository: busybox
-  tag: "latest"
-  pullPolicy: IfNotPresent
+  image:
+    repository: busybox
+    tag: "latest"
+    pullPolicy: IfNotPresent
 
-service:
-  type: ClusterIP
-  port: 80
+  service:
+    type: ClusterIP
+    port: 80
 
-ingress:
-  enabled: true
-  className: nginx
-  hosts:
-    - host: app3.local
-      paths:
-        - path: /
-          pathType: Prefix
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: app3.local
+        paths:
+          - path: /
+            pathType: Prefix
 
-config:
-  LOG_LEVEL: warn
-  FEATURE_FLAG: "true"
+  config:
+    LOG_LEVEL: warn
+    FEATURE_FLAG: "true"
 
-hpa:
-  enabled: true
-  minReplicas: 3
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 50
+  hpa:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 50
 
-readiness:
-  initialDelaySeconds: 5
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
 
-liveness:
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
 
-startup:
-  initialDelaySeconds: 3
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  startup:
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
