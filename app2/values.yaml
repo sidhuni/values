@@ -1,4 +1,6 @@
-replicaCount: 1
+your-chart:
+  enabled: true
+  replicaCount: 1
 
 image:
   repository: httpd

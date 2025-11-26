@@ -1,4 +1,6 @@
-replicaCount: 3
+your-chart:
+  enabled: true
+  replicaCount: 3
 
 image:
   repository: busybox
