@@ -1,4 +1,6 @@
-replicaCount: 2
+your-chart:  
+  enabled: true
+  replicaCount: 2
 
 image:
   repository: node
