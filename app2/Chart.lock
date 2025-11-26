@@ -1,6 +1,0 @@
-dependencies:
-- name: your-chart
-  repository: http://192.168.64.2:30080/
-  version: 0.1.0
-digest: sha256:e704d3d67c74b14c67ebfe293896a286bf9546eedab62f2f0600c13ed70a5a57
-generated: "2025-11-26T15:15:52.686444+05:30"
