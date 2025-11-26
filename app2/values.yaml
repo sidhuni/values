@@ -2,50 +2,50 @@ your-chart:
   enabled: true
   replicaCount: 1
 
-image:
-  repository: httpd
-  tag: "2.4"
+  image:
+    repository: httpd
+    tag: "2.4"
 
-service:
-  type: ClusterIP
-  port: 80
+  service:
+    type: ClusterIP
+    port: 80
 
-ingress:
-  enabled: true
-  className: nginx
-  hosts:
-    - host: app2.local
-      paths:
-        - path: /
-          pathType: Prefix
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: app2.local
+        paths:
+          - path: /
+            pathType: Prefix
 
-config:
-  LOG_LEVEL: info
-  FEATURE_FLAG: "false"
+  config:
+    LOG_LEVEL: info
+    FEATURE_FLAG: "false"
 
-hpa:
-  enabled: true
-  minReplicas: 1
-  maxReplicas: 4
-  targetCPUUtilizationPercentage: 70
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
 
-readiness:
-  initialDelaySeconds: 5
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
 
-liveness:
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
 
-startup:
-  initialDelaySeconds: 3
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  startup:
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
