@@ -2,41 +2,41 @@ your-chart:
   enabled: true
   replicaCount: 1
 
-image:
-  repository: redis
-  tag: "7.2"
+  image:
+    repository: redis
+    tag: "7.2"
 
-service:
-  type: ClusterIP
-  port: 6379
+  service:
+    type: ClusterIP
+    port: 6379
 
-ingress:
-  enabled: false
+  ingress:
+    enabled: false
 
-config:
-  LOG_LEVEL: error
-  FEATURE_FLAG: "false"
+  config:
+    LOG_LEVEL: error
+    FEATURE_FLAG: "false"
 
-hpa:
-  enabled: false
+  hpa:
+    enabled: false
 
-readiness:
-  initialDelaySeconds: 5
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
 
-liveness:
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
 
-startup:
-  initialDelaySeconds: 3
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  startup:
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
