@@ -2,50 +2,50 @@ your-chart:
   enabled: true
   replicaCount: 2
 
-image:
-  repository: node
-  tag: "20-alpine"
+  image:
+    repository: node
+    tag: "20-alpine"
 
-service:
-  type: ClusterIP
-  port: 3000
+  service:
+    type: ClusterIP
+    port: 3000
 
-ingress:
-  enabled: true
-  className: nginx
-  hosts:
-    - host: app5.local
-      paths:
-        - path: /
-          pathType: Prefix
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: app5.local
+        paths:
+          - path: /
+            pathType: Prefix
 
-config:
-  LOG_LEVEL: info
-  FEATURE_FLAG: "true"
+  config:
+    LOG_LEVEL: info
+    FEATURE_FLAG: "true"
 
-hpa:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 8
-  targetCPUUtilizationPercentage: 65
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 65
 
-readiness:
-  initialDelaySeconds: 5
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
 
-liveness:
-  initialDelaySeconds: 10
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
 
-startup:
-  initialDelaySeconds: 3
-  periodSeconds: 10
-  httpGet:
-    path: /
-    port: http
+  startup:
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
