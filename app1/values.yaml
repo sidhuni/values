@@ -1,6 +1,6 @@
 your-chart:
   enabled: true
-  replicaCount: 1
+  replicaCount: 2
 
   image:
     repository: nginx
@@ -26,7 +26,7 @@ your-chart:
   hpa:
     enabled: true
     minReplicas: 2
-    maxReplicas: 4
+    maxReplicas: 6
     targetCPUUtilizationPercentage: 60
 
   readiness:
