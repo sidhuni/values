@@ -1,0 +1,51 @@
+your-chart:  
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: httpd
+    tag: "2.4"
+
+  service:
+    type: ClusterIP
+    port: 3000
+
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: app6.local
+        paths:
+          - path: /
+            pathType: Prefix
+
+  config:
+    LOG_LEVEL: info
+    FEATURE_FLAG: "false"
+
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 60
+
+  readiness:
+    initialDelaySeconds: 6
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
+
+  liveness:
+    initialDelaySeconds: 7
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
+
+  startup:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
