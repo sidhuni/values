@@ -1,0 +1,51 @@
+your-chart:
+  enabled: true
+  replicaCount: 2
+
+  image:
+    repository: caddy
+    tag: "2.7.5-alpine"
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  ingress:
+    enabled: true
+    className: nginx
+    hosts:
+      - host: app2.local
+        paths:
+          - path: /
+            pathType: Prefix
+
+  config:
+    LOG_LEVEL: info
+    FEATURE_FLAG: "false"
+
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
+
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
+
+  startup:
+    initialDelaySeconds: 3
+    periodSeconds: 10
+    httpGet:
+      path: /
+      port: http
