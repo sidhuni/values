@@ -1,6 +1,6 @@
 your-chart:
   enabled: true
-  replicaCount: 5
+  replicaCount: 1
 
   image:
     repository: httpd
