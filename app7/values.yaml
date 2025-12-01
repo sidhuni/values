@@ -14,7 +14,7 @@ your-chart:
     enabled: true
     className: nginx
     hosts:
-      - host: app2.local
+      - host: app7.local
         paths:
           - path: /
             pathType: Prefix
