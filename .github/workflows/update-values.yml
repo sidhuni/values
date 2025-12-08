@@ -1,56 +1,68 @@
-name: Chart Version Update Automation
+name: Chart Version Update Automation (Filtered Logic)
 
 on:
   push:
     branches:
       - main
     paths:
-      # Explicit list for guaranteed triggering
+      # Use a broad path filter to ensure any relevant file change triggers the workflow
       - '*/values.yaml'
 
 jobs:
   run-chart-update:
-    runs-on: self-hosted 
+    runs-on: self-hosted # Use 'local' if you prefer, but 'self-hosted' is generally sufficient
     
     permissions:
       contents: write
       packages: read 
     
-    # Define primary environment variables (STATIC, non-conflicting)
     env:
       CHARTMUSEUM_URL: http://192.168.64.2:30080
       REPO_ROOT: ${{ github.workspace }}
-      # PARENT_APP_FILE will be defined dynamically in the final step
 
     steps:
       - name: ⬇️ Checkout Source Repository
+        # We fetch the entire history so git diff can compare against the previous commit
         uses: actions/checkout@v4
-        
+        with:
+          fetch-depth: 0 # IMPORTANT: Gets full history for accurate 'git diff'
+
       - name: ⬇️ Clone ArgoCD Apps Repository
         shell: bash
         run: |
-          # 🌟 FIX 1: Define ARGOCD_LOCAL using $RUNNER_TEMP shell variable
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
-          
           echo "Cloning ArgoCD Apps repo to $ARGOCD_LOCAL"
           if ! git clone --depth 1 https://github.com/sidhuni/argo-apps.git "$ARGOCD_LOCAL"; then
               echo "❌ ERROR: Failed to clone ArgoCD repository."
               exit 1
           fi
           
-      - name: 🏃 Run Full Chart Update, Package, and Upload Logic
+      - name: 🏃 Run Filtered Automation Logic
         shell: bash
         run: |
           set -euo pipefail
           
-          # 🌟 FIX 2: Define ARGOCD_LOCAL using $RUNNER_TEMP shell variable for stability
+          # Define necessary runtime variables inside the shell
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone"
           export REPO_ROOT="${{ env.REPO_ROOT }}"
           
-          echo "--- 1. Discovery and Versioning ---"
+          echo "--- 1. Discovering Changed Apps ---"
           
-          APPS=($(find . -maxdepth 1 -type d ! -name 'template' ! -name '.' ! -name '.*' -exec basename {} \; | sort -V))
+          # Get list of files changed between the commit BEFORE this run and the current commit
+          # Filters for 'appX/values.yaml' pattern and extracts only the directory name (app1, app2, etc.)
+          CHANGED_APPS_RAW=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '^app[0-9]+/values\.yaml$' || true)
           
+          # Extract only the directory names (e.g., 'app1' from 'app1/values.yaml')
+          # Sorts the final list for consistent processing order.
+          APPS_TO_PROCESS=($(echo "$CHANGED_APPS_RAW" | sed -E 's/(\/values\.yaml)//' | sort -V))
+
+          if [ ${#APPS_TO_PROCESS[@]} -eq 0 ]; then
+              echo "✅ No relevant 'values.yaml' files were changed in this commit. Automation complete."
+              exit 0 # Exit gracefully if no files matched the filter
+          fi
+          
+          echo "Apps to process based on commit changes: ${APPS_TO_PROCESS[*]}"
+
           TEMPLATE_CHART="./template/Chart.yaml"
           TEMPLATE_VERSION=$(grep "^version:" "$TEMPLATE_CHART" | awk '{print $2}')
           
@@ -58,11 +70,13 @@ jobs:
           BASE_MINOR=$(echo "$TEMPLATE_VERSION" | cut -d. -f2)
           BASE_PATCH=$(echo "$TEMPLATE_VERSION" | cut -d. -f3)
 
-          # --- 2. Loop Through All Apps and Process ---
-          for i in "${!APPS[@]}"; do
-              APP_NAME="${APPS[$i]}"
+          # --- 2. Loop Through ONLY THE CHANGED APPS ---
+          for i in "${!APPS_TO_PROCESS[@]}"; do
+              APP_NAME="${APPS_TO_PROCESS[$i]}" 
               APP_DIR="./$APP_NAME"
               
+              # Calculate new version (Index 'i' is now relative to the small, filtered list)
+              # NOTE: Version is based on the index *of the filtered list* (0, 1, 2, etc.)
               PATCH=$((BASE_PATCH + i + 1))
               NEW_VERSION="$BASE_MAJOR.$BASE_MINOR.$PATCH"
 
@@ -107,7 +121,6 @@ jobs:
       - name: ⬆️ Commit and Push ArgoCD Changes
         shell: bash
         run: |
-          # Define ARGOCD_LOCAL using $RUNNER_TEMP shell variable
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
           if ! cd "$ARGOCD_LOCAL"; then exit 1; fi
           
@@ -127,7 +140,7 @@ jobs:
       - name: ⬆️ Commit and Push Changes in Values Repository (Source Repo)
         shell: bash
         run: |
-          if ! cd ${{ env.REPO_ROOT }}; then exit 1; fi
+          if ! cd ${{ env.REPO_ROOT }}; then exit 1; endif
           
           git config user.name github-actions
           git config user.email github-actions@github.com
@@ -145,7 +158,6 @@ jobs:
       - name: 🚀 Apply Parent Application (Force Sync on Cluster)
         shell: bash
         run: |
-          # 🌟 FIX 3: Define PARENT_APP_FILE using $RUNNER_TEMP shell variable
           export PARENT_APP_FILE="$RUNNER_TEMP/argo-apps-clone/parentapp.yaml"
           echo "Applying parent application manifest: $PARENT_APP_FILE..."
           
