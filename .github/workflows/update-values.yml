@@ -5,7 +5,8 @@ on:
     branches:
       - main
     paths:
-      - '**/values.yaml'
+      # 🌟 FINAL FIX: Use single-level wildcard for reliable triggering 🌟
+      - '*/values.yaml'
 
 jobs:
   run-chart-update:
@@ -24,7 +25,7 @@ jobs:
       - name: ⬇️ Clone ArgoCD Apps Repository (FIXED PATH)
         shell: bash
         run: |
-          # 🌟 FIX: Define ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 🌟
+          # Define ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone"
           
           echo "Cloning ArgoCD Apps repo to $ARGOCD_LOCAL"
@@ -36,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           
-          # 🌟 FIX: Re-define ARGOCD_LOCAL in the shell for this step using the $RUNNER_TEMP base
+          # Re-define ARGOCD_LOCAL in the shell for this step
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
 
           echo "--- 1. Discovery and Versioning ---"
@@ -100,7 +101,7 @@ jobs:
       - name: ⬆️ Commit and Push ArgoCD Changes
         shell: bash
         run: |
-          # 🌟 FIX: Define ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 🌟
+          # Define ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
           cd "$ARGOCD_LOCAL"
           
