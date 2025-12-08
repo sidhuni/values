@@ -16,7 +16,7 @@ on:
 
 jobs:
   run-chart-update:
-    runs-on: local 
+    runs-on: self-hosted 
     
     permissions:
       contents: write
