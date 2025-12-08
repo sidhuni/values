@@ -1,45 +1,47 @@
-name: Chart Version Update Automation (YAML ONLY)
+name: Chart Version Update Automation
 
 on:
   push:
     branches:
       - main
     paths:
+      # 🌟 SCALABLE FIX: Trigger on any values.yaml file change 🌟
       - '**/values.yaml'
 
 jobs:
   run-chart-update:
     runs-on: self-hosted
+    
+    # 🌟 Define environment variables 🌟
     env:
-      # Define all your configuration variables here
       CHARTMUSEUM_URL: http://192.168.64.2:30080
-      ARGOCD_LOCAL: ${{ runner.temp }}/argo-apps-clone  # Use a temporary directory for cloning
-      VALUES_REPO: ${{ github.workspace }} # The current workspace is where your values files are
+      # Use the runner's temporary directory for the cloned ArgoCD repo
+      ARGOCD_LOCAL: ${{ runner.temp }}/argo-apps-clone 
+      # The main repository workspace is where your app folders and parentapp.yaml reside
+      REPO_ROOT: ${{ github.workspace }}
       PARENT_APP_FILE: ${{ github.workspace }}/parentapp.yaml
-      
+
     steps:
-      - name: ⬇️ Checkout Source Repository
-        # Checkout the repo containing the app folders and the template
+      - name: ⬇️ Checkout Source Repository (for template/app folders)
+        # Clones the repository where this workflow and your app folders are located
         uses: actions/checkout@v4
         
-      - name: ⬇️ Clone ArgoCD Apps Repository
-        # We must clone the ArgoCD repo to update the app*.yaml files inside it
+      - name: ⬇️ Clone ArgoCD Apps Repository (for application/*.yaml updates)
         run: |
+          # Replace YOUR_ORG/YOUR_ARGOCD_REPO with the actual clone URL
           git clone --depth 1 https://github.com/YOUR_ORG/YOUR_ARGOCD_REPO.git ${{ env.ARGOCD_LOCAL }}
-          # NOTE: Use an SSH key or PAT for authentication if the repo is private.
           
-      - name: 🏃 Run Full Chart Update Logic
+      - name: 🏃 Run Full Chart Update, Package, and Upload Logic
+        shell: bash
         run: |
           set -euo pipefail
           
-          # --- 1. Dynamic App Discovery and Versioning ---
-          echo "Discovering apps and determining base version..."
+          echo "--- 1. Discovery and Versioning ---"
+          
           # Find apps, exclude system folders, and sort numerically
           APPS=($(find . -maxdepth 1 -type d ! -name 'template' ! -name '.' ! -name '.*' -exec basename {} \; | sort -V))
           
           TEMPLATE_CHART="./template/Chart.yaml"
-          
-          # Read base version from template
           TEMPLATE_VERSION=$(grep "^version:" "$TEMPLATE_CHART" | awk '{print $2}')
           IFS='.' read -r BASE_MAJOR BASE_MINOR BASE_PATCH <<< "$TEMPLATE_VERSION"
 
@@ -57,14 +59,14 @@ jobs:
               APP_NUMBER=$(echo "$APP_NAME" | grep -o '[0-9]\+' || echo "")
               NEW_CHART_NAME="${BASE_CHART_NAME}${APP_NUMBER}"
 
-              echo "--- Processing $APP_NAME, Version: $NEW_VERSION, Chart: $NEW_CHART_NAME ---"
+              echo "---------------------------------------"
+              echo "Processing $APP_NAME, Version: $NEW_VERSION, Chart: $NEW_CHART_NAME"
 
-              # Prepare app folder and update Chart.yaml (using 'sed -i' for Linux/GNU sed)
-              # NOTE: On your Mac runner, you might need 'sed -i ""' or 'gsed' if the default sed is BSD.
+              # Prepare app folder and update Chart.yaml
               mkdir -p "$APP_DIR/charts"
               cp "$TEMPLATE_CHART" "$APP_DIR/Chart.yaml"
               
-              # Use the GNU sed pattern for GitHub/Linux containers, or adjust for Mac's BSD sed
+              # Use GNU sed syntax (standard on most Linux runners)
               sed -i "s/^name:.*/name: $NEW_CHART_NAME/" "$APP_DIR/Chart.yaml"
               sed -i "s/^version:.*/version: $NEW_VERSION/" "$APP_DIR/Chart.yaml"
 
@@ -78,19 +80,19 @@ jobs:
               curl --fail --silent --show-error --data-binary "@$PACKAGE_FILE" "$CHARTMUSEUM_URL/api/charts"
               echo " Upload complete."
 
-              cd - >/dev/null
+              cd "${{ env.REPO_ROOT }}" # Return to the root of the source repo
 
-              # Update ArgoCD App YAML
+              # Update ArgoCD App YAML in the CLONED repo
               APP_FILE="${{ env.ARGOCD_LOCAL }}/application/$APP_NAME.yaml"
               if [ ! -f "$APP_FILE" ]; then
                   echo "❌ Error: ArgoCD app file not found: $APP_FILE"
                   exit 1
               fi
-              # Update the targetRevision and chart name in the cloned repo
+              # Update the targetRevision and chart name in the cloned repo (using GNU sed)
               sed -i "s/targetRevision:.*/targetRevision: $NEW_VERSION/" "$APP_FILE"
               sed -i "s/chart:.*/chart: $NEW_CHART_NAME/" "$APP_FILE"
 
-              # Cleanup
+              # Cleanup temporary local files
               rm -rf "$APP_DIR/Chart.yaml" "$APP_DIR/Chart.lock" "$APP_DIR/*.tgz" "$APP_DIR/charts"
               
               echo "✅ $APP_NAME processed successfully."
@@ -99,10 +101,12 @@ jobs:
       - name: ⬆️ Commit and Push ArgoCD Changes
         run: |
           cd ${{ env.ARGOCD_LOCAL }}
+          
+          # Configure Git user for the commit
           git config user.name github-actions
           git config user.email github-actions@github.com
           
-          # Check for changes and commit
+          # Check for changes and commit/push
           if git diff --exit-code application/*.yaml >/dev/null; then
               echo "No changes detected in ArgoCD application YAMLs. Skipping commit."
           else
@@ -113,8 +117,15 @@ jobs:
               echo "Pushed updated ArgoCD manifests."
           fi
 
-      - name: 🚀 Apply Parent Application (If required for immediate trigger)
+      - name: 🚀 Apply Parent Application (Force Sync on Cluster)
         run: |
           echo "Applying parent application manifest: ${{ env.PARENT_APP_FILE }}..."
-          kubectl apply -f "${{ env.PARENT_APP_FILE }}"
-          echo "Parent application applied successfully."
+          
+          if [ -f "${{ env.PARENT_APP_FILE }}" ]; then
+              kubectl apply -f "${{ env.PARENT_APP_FILE }}"
+              echo "Parent application applied successfully."
+          else
+              echo "❌ ERROR: Parent app file not found at ${{ env.PARENT_APP_FILE }}. Skipping kubectl apply."
+              # This failure indicates a problem in the source repository setup, stop the job.
+              exit 1 
+          fi
