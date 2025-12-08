@@ -25,8 +25,8 @@ your-chart:
 
   hpa:
     enabled: true
-    minReplicas: 2
-    maxReplicas: 7
+    minReplicas: 3
+    maxReplicas: 1
     targetCPUUtilizationPercentage: 60
 
   readiness:
