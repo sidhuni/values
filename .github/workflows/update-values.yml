@@ -5,8 +5,15 @@ on:
     branches:
       - main
     paths:
-      # 🌟 FINAL FIX: Use single-level wildcard for reliable triggering 🌟
-      - '*/values.yaml'
+      paths:
+      # Use an explicit list for guaranteed detection
+      - 'app1/values.yaml'
+      - 'app2/values.yaml'
+      - 'app3/values.yaml'
+      - 'app4/values.yaml'
+      - 'app5/values.yaml'
+      - 'app6/values.yaml'
+      - 'app7/values.yaml'
 
 jobs:
   run-chart-update:
