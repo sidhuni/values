@@ -140,7 +140,8 @@ jobs:
       - name: ⬆️ Commit and Push Changes in Values Repository (Source Repo)
         shell: bash
         run: |
-          if ! cd ${{ env.REPO_ROOT }}; then exit 1; endif
+          # 🌟 FIX: Use '|| exit 1' for reliable change of directory and error handling
+          cd ${{ env.REPO_ROOT }} || exit 1 
           
           git config user.name github-actions
           git config user.email github-actions@github.com
