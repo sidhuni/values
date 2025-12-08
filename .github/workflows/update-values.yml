@@ -5,14 +5,9 @@ on:
     branches:
       - main
     paths:
-      # FIX: Use explicit paths for guaranteed triggering
-      - 'app1/values.yaml'
-      - 'app2/values.yaml'
-      - 'app3/values.yaml'
-      - 'app4/values.yaml'
-      - 'app5/values.yaml'
-      - 'app6/values.yaml'
-      - 'app7/values.yaml'
+      # 🌟 TEMPORARY FIX: Restrict to app1 for initial testing. 
+      # Change back to '*/values.yaml' or the full list once app1 is verified.
+      - 'app1/values.yaml' 
 
 jobs:
   run-chart-update:
@@ -48,6 +43,7 @@ jobs:
           
           echo "--- 1. Discovery and Versioning ---"
           
+          # Find apps, exclude system folders, and sort numerically
           APPS=($(find . -maxdepth 1 -type d ! -name 'template' ! -name '.' ! -name '.*' -exec basename {} \; | sort -V))
           
           TEMPLATE_CHART="./template/Chart.yaml"
@@ -59,9 +55,11 @@ jobs:
               APP_NAME="${APPS[$i]}"
               APP_DIR="./$APP_NAME"
               
+              # Calculate new version
               PATCH=$((BASE_PATCH + i + 1))
               NEW_VERSION="$BASE_MAJOR.$BASE_MINOR.$PATCH"
 
+              # Calculate new chart name
               BASE_CHART_NAME=$(grep "^name:" "$TEMPLATE_CHART" | awk '{print $2}')
               APP_NUMBER=$(echo "$APP_NAME" | grep -o '[0-9]\+' || echo "")
               NEW_CHART_NAME="${BASE_CHART_NAME}${APP_NUMBER}"
