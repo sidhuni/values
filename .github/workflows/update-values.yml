@@ -1,0 +1,41 @@
+name: Deploy Changed Values
+
+on:
+  push:
+    paths:
+      - '**/values.yaml'
+  workflow_dispatch:
+
+jobs:
+  deploy-changed-values:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed apps
+        id: detect
+        run: |
+          CHANGED_APPS=()
+          for file in $(git diff --name-only ${{ github.event.before }} ${{ github.sha }}); do
+            if [[ "$file" == */values.yaml ]]; then
+              APP_NAME=$(dirname "$file")
+              CHANGED_APPS+=("$APP_NAME")
+            fi
+          done
+          # Remove duplicates
+          CHANGED_APPS=($(echo "${CHANGED_APPS[@]}" | tr ' ' '\n' | sort -u))
+          echo "Changed apps: ${CHANGED_APPS[*]}"
+          echo "apps=${CHANGED_APPS[*]}" >> $GITHUB_OUTPUT
+
+      - name: Deploy changed apps
+        if: steps.detect.outputs.apps != ''
+        run: |
+          for app in ${{ steps.detect.outputs.apps }}; do
+            echo "Deploying $app..."
+            # Put your deployment commands here
+            # e.g., update ArgoCD app, Helm upgrade, ChartMuseum push
+          done
