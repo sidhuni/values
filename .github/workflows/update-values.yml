@@ -5,14 +5,14 @@ on:
     branches:
       - main
     paths:
+      # FIX: Use single-level wildcard for reliable triggering from the repo root
       - '*/values.yaml'
 
 jobs:
   run-chart-update:
-# ... (Rest of the jobs block)
     runs-on: self-hosted
     
-    # Define primary fixed environment variables
+    # Define primary fixed environment variables available to all steps
     env:
       CHARTMUSEUM_URL: http://192.168.64.2:30080
       REPO_ROOT: ${{ github.workspace }}
@@ -25,7 +25,7 @@ jobs:
       - name: ⬇️ Clone ArgoCD Apps Repository (FIXED PATH)
         shell: bash
         run: |
-          # Define ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 
+          # Use $RUNNER_TEMP to create a stable, temporary directory for the clone
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone"
           
           echo "Cloning ArgoCD Apps repo to $ARGOCD_LOCAL"
@@ -37,11 +37,12 @@ jobs:
         run: |
           set -euo pipefail
           
-          # Re-define ARGOCD_LOCAL in the shell for this step
+          # Re-define ARGOCD_LOCAL in the shell for continued use
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
-
+          
           echo "--- 1. Discovery and Versioning ---"
           
+          # Find apps, exclude system folders, and sort numerically
           APPS=($(find . -maxdepth 1 -type d ! -name 'template' ! -name '.' ! -name '.*' -exec basename {} \; | sort -V))
           
           TEMPLATE_CHART="./template/Chart.yaml"
@@ -66,7 +67,7 @@ jobs:
               mkdir -p "$APP_DIR/charts"
               cp "$TEMPLATE_CHART" "$APP_DIR/Chart.yaml"
               
-              # Use BSD sed syntax (sed -i '')
+              # Use BSD sed syntax (sed -i '') for Mac runner
               sed -i '' "s/^name:.*/name: $NEW_CHART_NAME/" "$APP_DIR/Chart.yaml"
               sed -i '' "s/^version:.*/version: $NEW_VERSION/" "$APP_DIR/Chart.yaml"
 
@@ -88,7 +89,7 @@ jobs:
                   echo "❌ Error: ArgoCD app file not found: $APP_FILE"
                   exit 1
               fi
-              # Use BSD sed syntax (sed -i '')
+              # Use BSD sed syntax (sed -i '') for Mac runner
               sed -i '' "s/targetRevision:.*/targetRevision: $NEW_VERSION/" "$APP_FILE"
               sed -i '' "s/chart:.*/chart: $NEW_CHART_NAME/" "$APP_FILE"
 
@@ -101,7 +102,7 @@ jobs:
       - name: ⬆️ Commit and Push ArgoCD Changes
         shell: bash
         run: |
-          # Define ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 
+          # Redefine ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
           cd "$ARGOCD_LOCAL"
           
