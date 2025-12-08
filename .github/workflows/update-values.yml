@@ -5,19 +5,19 @@ on:
     branches:
       - main
     paths:
-      # Use an explicit list for guaranteed triggering based on confirmed working solution
+      # Explicit list for reliable triggering
       - 'app1/values.yaml'
-      - 'app2/values.yaml'
-      - 'app3/values.yaml'
-      - 'app4/values.yaml'
-      - 'app5/values.yaml'
-      - 'app6/values.yaml'
-      - 'app7/values.yaml'
+      # ... (rest of your app list)
 
 jobs:
   run-chart-update:
-    # Use 'local' if you named your runner 'local', or 'self-hosted' if you didn't
+    # Use the name you assigned to your runner
     runs-on: local 
+    
+    # 🌟 CRITICAL FIX: Explicitly grant write permissions 🌟
+    permissions:
+      contents: write
+      packages: read
     
     # Define primary fixed environment variables
     env:
