@@ -1,29 +1,32 @@
-name: Chart Version Update Automation (Full Script Replacement)
+name: Chart Version Update Automation
 
 on:
   push:
     branches:
       - main
     paths:
-      # Use an explicit list for guaranteed triggering
+      # Explicit list for guaranteed triggering
       - 'app1/values.yaml'
-      
+      - 'app2/values.yaml'
+      - 'app3/values.yaml'
+      - 'app4/values.yaml'
+      - 'app5/values.yaml'
+      - 'app6/values.yaml'
+      - 'app7/values.yaml'
 
 jobs:
   run-chart-update:
-    # Use the specific name you assigned to your runner
     runs-on: local 
     
-    # CRITICAL: Explicitly grant write permissions
     permissions:
       contents: write
       packages: read 
     
-    # Define simple, non-conflicting environment variables
+    # Define primary environment variables (STATIC, non-conflicting)
     env:
       CHARTMUSEUM_URL: http://192.168.64.2:30080
       REPO_ROOT: ${{ github.workspace }}
-      # PARENT_APP_FILE definition will use ARGOCD_LOCAL in the 'run' step
+      # PARENT_APP_FILE will be defined dynamically in the final step
 
     steps:
       - name: ⬇️ Checkout Source Repository
@@ -32,8 +35,8 @@ jobs:
       - name: ⬇️ Clone ArgoCD Apps Repository
         shell: bash
         run: |
-          # 🌟 FIX: Define ARGOCD_LOCAL using the shell variable $RUNNER_TEMP 🌟
-          export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone"
+          # 🌟 FIX 1: Define ARGOCD_LOCAL using $RUNNER_TEMP shell variable
+          export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
           
           echo "Cloning ArgoCD Apps repo to $ARGOCD_LOCAL"
           if ! git clone --depth 1 https://github.com/sidhuni/argo-apps.git "$ARGOCD_LOCAL"; then
@@ -41,12 +44,12 @@ jobs:
               exit 1
           fi
           
-      - name: 🏃 Run Full Automation Logic (Build, Upload, Update ArgoCD)
+      - name: 🏃 Run Full Chart Update, Package, and Upload Logic
         shell: bash
         run: |
           set -euo pipefail
           
-          # Define necessary runtime variables inside the shell
+          # 🌟 FIX 2: Define ARGOCD_LOCAL using $RUNNER_TEMP shell variable for stability
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone"
           export REPO_ROOT="${{ env.REPO_ROOT }}"
           
@@ -73,11 +76,12 @@ jobs:
               APP_NUMBER=$(echo "$APP_NAME" | grep -o '[0-9]\+' || echo "")
               NEW_CHART_NAME="${BASE_CHART_NAME}${APP_NUMBER}"
 
-              echo "--- Processing $APP_NAME: Version $NEW_VERSION ---"
+              echo "---------------------------------------"
+              echo "Processing $APP_NAME, Version: $NEW_VERSION, Chart: $NEW_CHART_NAME"
 
-              # Prepare folder and update Chart.yaml
               mkdir -p "$APP_DIR/charts"
               cp "$TEMPLATE_CHART" "$APP_DIR/Chart.yaml"
+              
               sed -i '' "s/^name:.*/name: $NEW_CHART_NAME/" "$APP_DIR/Chart.yaml"
               sed -i '' "s/^version:.*/version: $NEW_VERSION/" "$APP_DIR/Chart.yaml"
 
@@ -89,19 +93,19 @@ jobs:
               
               echo "Uploading $PACKAGE_FILE..."
               curl --fail --silent --show-error --data-binary "@$PACKAGE_FILE" "${{ env.CHARTMUSEUM_URL }}/api/charts"
-              echo -e "\nUpload complete."
+              echo " Upload complete."
 
               if ! cd "$REPO_ROOT"; then exit 1; fi
 
               # Update ArgoCD App YAML in the CLONED repo
               APP_FILE="$ARGOCD_LOCAL/application/$APP_NAME.yaml"
-              if [ ! -f "$APP_FILE" ]; then echo "❌ ArgoCD app file not found: $APP_FILE"; exit 1; fi
+              if [ ! -f "$APP_FILE" ]; then echo "❌ Error: ArgoCD app file not found: $APP_FILE"; exit 1; fi
+              
               sed -i '' "s/targetRevision:.*/targetRevision: $NEW_VERSION/" "$APP_FILE"
               sed -i '' "s/chart:.*/chart: $NEW_CHART_NAME/" "$APP_FILE"
 
               # Cleanup local chart files
-              rm -rf "$APP_DIR/Chart.yaml" "$APP_DIR/Chart.lock" "$PACKAGE_FILE" 
-              rm -rf "$APP_DIR/charts"
+              rm -rf "$APP_DIR/Chart.yaml" "$APP_DIR/Chart.lock" "$APP_DIR/*.tgz" "$APP_DIR/charts"
               
               echo "✅ $APP_NAME processed successfully."
           done
@@ -109,6 +113,7 @@ jobs:
       - name: ⬆️ Commit and Push ArgoCD Changes
         shell: bash
         run: |
+          # Define ARGOCD_LOCAL using $RUNNER_TEMP shell variable
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
           if ! cd "$ARGOCD_LOCAL"; then exit 1; fi
           
@@ -120,7 +125,7 @@ jobs:
           else
               echo "Committing changes to ArgoCD repository..."
               git add application/*.yaml
-              git commit -m "Automated update: Chart versions synced"
+              git commit -m "Automated update: Chart versions synced with values change"
               git push
               echo "Pushed updated ArgoCD manifests."
           fi
@@ -146,8 +151,8 @@ jobs:
       - name: 🚀 Apply Parent Application (Force Sync on Cluster)
         shell: bash
         run: |
-          # Define the parent app file path using the temporary location
-          PARENT_APP_FILE="$RUNNER_TEMP/argo-apps-clone/parentapp.yaml"
+          # 🌟 FIX 3: Define PARENT_APP_FILE using $RUNNER_TEMP shell variable
+          export PARENT_APP_FILE="$RUNNER_TEMP/argo-apps-clone/parentapp.yaml"
           echo "Applying parent application manifest: $PARENT_APP_FILE..."
           
           if [ -f "$PARENT_APP_FILE" ]; then
