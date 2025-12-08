@@ -5,8 +5,14 @@ on:
     branches:
       - main
     paths:
-      # FIX: Use single-level wildcard for reliable triggering from the repo root
-      - '*/values.yaml'
+      # These list items must align perfectly
+      - 'app1/values.yaml'
+      - 'app2/values.yaml'
+      - 'app3/values.yaml'
+      - 'app4/values.yaml'
+      - 'app5/values.yaml'
+      - 'app6/values.yaml'
+      - 'app7/values.yaml'
 
 jobs:
   run-chart-update:
