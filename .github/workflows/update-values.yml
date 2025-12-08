@@ -11,26 +11,38 @@ jobs:
   run-chart-update:
     runs-on: self-hosted
     
-    # 🌟 CORRECT INDENTATION FOR env BLOCK 🌟
-    env:
-      CHARTMUSEUM_URL: http://192.168.64.2:30080
-      # Line 19 (Check your file's line numbers): Must use ${{ runner.temp }}
-      ARGOCD_LOCAL: ${{ runner.temp }}/argo-apps-clone 
-      REPO_ROOT: ${{ github.workspace }}
-      PARENT_APP_FILE: ${{ github.workspace }}/parentapp.yaml
+    # NOTE: We are intentionally removing the job-level 'env' block 
+    # to avoid the Line 18 parsing error and defining vars directly in the step.
 
     steps:
       - name: ⬇️ Checkout Source Repository (for template/app folders)
-        # Clones the repository where this workflow and your app folders are located
         uses: actions/checkout@v4
         
       - name: ⬇️ Clone ArgoCD Apps Repository (for application/*.yaml updates)
+        # 🌟 FIX: Define ARGOCD_LOCAL and other required variables here, 
+        # using 'shell: bash' for safety and using the correct ${{ }} syntax.
+        shell: bash
         run: |
+          # Define environment variables using the runner context
+          export CHARTMUSEUM_URL="http://192.168.64.2:30080"
+          export ARGOCD_LOCAL="${{ runner.temp }}/argo-apps-clone" 
+          export REPO_ROOT="${{ github.workspace }}"
+          export PARENT_APP_FILE="${{ github.workspace }}/parentapp.yaml"
+          
+          echo "Cloning ArgoCD Apps repo to $ARGOCD_LOCAL"
           # Replace YOUR_ORG/YOUR_ARGOCD_REPO with the actual clone URL
-          git clone --depth 1 https://github.com/YOUR_ORG/YOUR_ARGOCD_REPO.git ${{ env.ARGOCD_LOCAL }}
+          git clone --depth 1 https://github.com/YOUR_ORG/YOUR_ARGOCD_REPO.git $ARGOCD_LOCAL
           
       - name: 🏃 Run Full Chart Update, Package, and Upload Logic
         shell: bash
+        # 🌟 FIX: Redefine variables here to ensure all run steps have access.
+        # This is the most reliable way on self-hosted runners.
+        env:
+          CHARTMUSEUM_URL: http://192.168.64.2:30080
+          ARGOCD_LOCAL: ${{ runner.temp }}/argo-apps-clone
+          REPO_ROOT: ${{ github.workspace }}
+          PARENT_APP_FILE: ${{ github.workspace }}/parentapp.yaml
+          
         run: |
           set -euo pipefail
           
@@ -64,7 +76,7 @@ jobs:
               mkdir -p "$APP_DIR/charts"
               cp "$TEMPLATE_CHART" "$APP_DIR/Chart.yaml"
               
-              # Use GNU sed syntax (standard on most Linux runners)
+              # Use GNU sed syntax
               sed -i "s/^name:.*/name: $NEW_CHART_NAME/" "$APP_DIR/Chart.yaml"
               sed -i "s/^version:.*/version: $NEW_VERSION/" "$APP_DIR/Chart.yaml"
 
@@ -90,13 +102,16 @@ jobs:
               sed -i "s/targetRevision:.*/targetRevision: $NEW_VERSION/" "$APP_FILE"
               sed -i "s/chart:.*/chart: $NEW_CHART_NAME/" "$APP_FILE"
 
-              # Cleanup temporary local files
+              # Cleanup
               rm -rf "$APP_DIR/Chart.yaml" "$APP_DIR/Chart.lock" "$APP_DIR/*.tgz" "$APP_DIR/charts"
               
               echo "✅ $APP_NAME processed successfully."
           done
 
       - name: ⬆️ Commit and Push ArgoCD Changes
+        shell: bash
+        env:
+          ARGOCD_LOCAL: ${{ runner.temp }}/argo-apps-clone
         run: |
           cd ${{ env.ARGOCD_LOCAL }}
           
@@ -116,6 +131,9 @@ jobs:
           fi
 
       - name: 🚀 Apply Parent Application (Force Sync on Cluster)
+        shell: bash
+        env:
+          PARENT_APP_FILE: ${{ github.workspace }}/parentapp.yaml
         run: |
           echo "Applying parent application manifest: ${{ env.PARENT_APP_FILE }}..."
           
@@ -124,6 +142,5 @@ jobs:
               echo "Parent application applied successfully."
           else
               echo "❌ ERROR: Parent app file not found at ${{ env.PARENT_APP_FILE }}. Skipping kubectl apply."
-              # This failure indicates a problem in the source repository setup, stop the job.
               exit 1 
           fi
