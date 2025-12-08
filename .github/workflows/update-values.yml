@@ -1,91 +1,120 @@
-name: Update Changed Apps
+name: Chart Version Update Automation (YAML ONLY)
 
 on:
   push:
+    branches:
+      - main
     paths:
       - '**/values.yaml'
 
 jobs:
-  update-apps:
-    runs-on: self-hosted, local-runner
-
+  run-chart-update:
+    runs-on: self-hosted
+    env:
+      # Define all your configuration variables here
+      CHARTMUSEUM_URL: http://192.168.64.2:30080
+      ARGOCD_LOCAL: ${{ runner.temp }}/argo-apps-clone  # Use a temporary directory for cloning
+      VALUES_REPO: ${{ github.workspace }} # The current workspace is where your values files are
+      PARENT_APP_FILE: ${{ github.workspace }}/parentapp.yaml
+      
     steps:
-      # 1️⃣ Checkout the repository containing values.yaml
-      - name: Checkout values repo
-        uses: actions/checkout@v3
-        with:
-          persist-credentials: true
-
-      # 2️⃣ Detect which values.yaml files changed
-      - name: Detect changed apps
-        id: changed
+      - name: ⬇️ Checkout Source Repository
+        # Checkout the repo containing the app folders and the template
+        uses: actions/checkout@v4
+        
+      - name: ⬇️ Clone ArgoCD Apps Repository
+        # We must clone the ArgoCD repo to update the app*.yaml files inside it
         run: |
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep 'values.yaml' || true)
-          echo "Changed files: $CHANGED_FILES"
-          APPS=$(echo "$CHANGED_FILES" | awk -F/ '{print $1}' | sort | uniq | tr '\n' ',' | sed 's/,$//')
-          echo "apps=$APPS" >> $GITHUB_OUTPUT
-
-      # 3️⃣ Setup Helm
-      - name: Setup Helm
-        uses: azure/setup-helm@v3
-
-      # 4️⃣ Loop through changed apps
-      - name: Process changed apps
-        if: steps.changed.outputs.apps != ''
+          git clone --depth 1 https://github.com/YOUR_ORG/YOUR_ARGOCD_REPO.git ${{ env.ARGOCD_LOCAL }}
+          # NOTE: Use an SSH key or PAT for authentication if the repo is private.
+          
+      - name: 🏃 Run Full Chart Update Logic
         run: |
-          CHANGED_APPS=${{ steps.changed.outputs.apps }}
-          IFS=',' read -ra APP_ARRAY <<< "$CHANGED_APPS"
-
+          set -euo pipefail
+          
+          # --- 1. Dynamic App Discovery and Versioning ---
+          echo "Discovering apps and determining base version..."
+          # Find apps, exclude system folders, and sort numerically
+          APPS=($(find . -maxdepth 1 -type d ! -name 'template' ! -name '.' ! -name '.*' -exec basename {} \; | sort -V))
+          
           TEMPLATE_CHART="./template/Chart.yaml"
-          CHARTMUSEUM_URL="http://192.168.64.2:30080"
-          ARGOCD_LOCAL="$HOME/argo-apps"
+          
+          # Read base version from template
+          TEMPLATE_VERSION=$(grep "^version:" "$TEMPLATE_CHART" | awk '{print $2}')
+          IFS='.' read -r BASE_MAJOR BASE_MINOR BASE_PATCH <<< "$TEMPLATE_VERSION"
 
-          for APP in "${APP_ARRAY[@]}"; do
-            echo "Processing $APP..."
+          # --- 2. Loop Through All Apps and Process ---
+          for i in "${!APPS[@]}"; do
+              APP_NAME="${APPS[$i]}"
+              APP_DIR="./$APP_NAME"
+              
+              # Calculate new version
+              PATCH=$((BASE_PATCH + i + 1))
+              NEW_VERSION="$BASE_MAJOR.$BASE_MINOR.$PATCH"
 
-            APP_DIR="./$APP"
-            TEMPLATE_VERSION=$(grep "^version:" "$TEMPLATE_CHART" | awk '{print $2}')
-            IFS='.' read -r BASE_MAJOR BASE_MINOR BASE_PATCH <<< "$TEMPLATE_VERSION"
-            PATCH=$((BASE_PATCH + 1))  # Increment patch for changed app
-            NEW_VERSION="$BASE_MAJOR.$BASE_MINOR.$PATCH"
+              # Calculate new chart name
+              BASE_CHART_NAME=$(grep "^name:" "$TEMPLATE_CHART" | awk '{print $2}')
+              APP_NUMBER=$(echo "$APP_NAME" | grep -o '[0-9]\+' || echo "")
+              NEW_CHART_NAME="${BASE_CHART_NAME}${APP_NUMBER}"
 
-            BASE_CHART_NAME=$(grep "^name:" "$TEMPLATE_CHART" | awk '{print $2}')
-            APP_NUMBER=$(echo "$APP" | grep -o '[0-9]\+' || echo "")
-            NEW_CHART_NAME="${BASE_CHART_NAME}${APP_NUMBER}"
+              echo "--- Processing $APP_NAME, Version: $NEW_VERSION, Chart: $NEW_CHART_NAME ---"
 
-            # Update Chart.yaml
-            cp "$TEMPLATE_CHART" "$APP_DIR/Chart.yaml"
-            sed -i "s/^name:.*/name: $NEW_CHART_NAME/" "$APP_DIR/Chart.yaml"
-            sed -i "s/^version:.*/version: $NEW_VERSION/" "$APP_DIR/Chart.yaml"
+              # Prepare app folder and update Chart.yaml (using 'sed -i' for Linux/GNU sed)
+              # NOTE: On your Mac runner, you might need 'sed -i ""' or 'gsed' if the default sed is BSD.
+              mkdir -p "$APP_DIR/charts"
+              cp "$TEMPLATE_CHART" "$APP_DIR/Chart.yaml"
+              
+              # Use the GNU sed pattern for GitHub/Linux containers, or adjust for Mac's BSD sed
+              sed -i "s/^name:.*/name: $NEW_CHART_NAME/" "$APP_DIR/Chart.yaml"
+              sed -i "s/^version:.*/version: $NEW_VERSION/" "$APP_DIR/Chart.yaml"
 
-            # Build dependencies
-            cd "$APP_DIR"
-            helm dependency update
-            cd - >/dev/null
+              # Build, Package, and Upload
+              cd "$APP_DIR"
+              helm dependency update >/dev/null
+              PACKAGE_OUTPUT=$(helm package . --destination .)
+              PACKAGE_FILE=$(echo "$PACKAGE_OUTPUT" | awk -F': ' '/Successfully packaged chart/ {print $NF}')
+              
+              echo "Uploading $PACKAGE_FILE..."
+              curl --fail --silent --show-error --data-binary "@$PACKAGE_FILE" "$CHARTMUSEUM_URL/api/charts"
+              echo " Upload complete."
 
-            # Package chart
-            PACKAGE_FILE=$(helm package "$APP_DIR" --destination "$APP_DIR" | awk -F': ' '/Successfully packaged chart/ {print $NF}')
-            echo "Packaged chart: $PACKAGE_FILE"
+              cd - >/dev/null
 
-            # Upload to ChartMuseum
-            curl --fail --silent --show-error --data-binary "@$PACKAGE_FILE" "$CHARTMUSEUM_URL/api/charts"
-            echo "Uploaded $PACKAGE_FILE to ChartMuseum"
+              # Update ArgoCD App YAML
+              APP_FILE="${{ env.ARGOCD_LOCAL }}/application/$APP_NAME.yaml"
+              if [ ! -f "$APP_FILE" ]; then
+                  echo "❌ Error: ArgoCD app file not found: $APP_FILE"
+                  exit 1
+              fi
+              # Update the targetRevision and chart name in the cloned repo
+              sed -i "s/targetRevision:.*/targetRevision: $NEW_VERSION/" "$APP_FILE"
+              sed -i "s/chart:.*/chart: $NEW_CHART_NAME/" "$APP_FILE"
 
-            # Update ArgoCD app YAML
-            APP_FILE="$ARGOCD_LOCAL/application/$APP.yaml"
-            sed -i "s/targetRevision:.*/targetRevision: $NEW_VERSION/" "$APP_FILE"
-            sed -i "s/chart:.*/chart: $NEW_CHART_NAME/" "$APP_FILE"
-
-            # Commit & push ArgoCD changes
-            cd "$ARGOCD_LOCAL"
-            git add "$APP_FILE"
-            git commit -m "Automated update: $APP version $NEW_VERSION" || echo "No changes to commit"
-            git push
-            cd - >/dev/null
-
-            # Cleanup
-            rm -f "$APP_DIR/Chart.yaml" "$PACKAGE_FILE"
-            rm -rf "$APP_DIR/charts"
-
-            echo "✅ $APP updated successfully!"
+              # Cleanup
+              rm -rf "$APP_DIR/Chart.yaml" "$APP_DIR/Chart.lock" "$APP_DIR/*.tgz" "$APP_DIR/charts"
+              
+              echo "✅ $APP_NAME processed successfully."
           done
+
+      - name: ⬆️ Commit and Push ArgoCD Changes
+        run: |
+          cd ${{ env.ARGOCD_LOCAL }}
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          
+          # Check for changes and commit
+          if git diff --exit-code application/*.yaml >/dev/null; then
+              echo "No changes detected in ArgoCD application YAMLs. Skipping commit."
+          else
+              echo "Committing changes to ArgoCD repository..."
+              git add application/*.yaml
+              git commit -m "Automated update: Chart versions synced with values change"
+              git push
+              echo "Pushed updated ArgoCD manifests."
+          fi
+
+      - name: 🚀 Apply Parent Application (If required for immediate trigger)
+        run: |
+          echo "Applying parent application manifest: ${{ env.PARENT_APP_FILE }}..."
+          kubectl apply -f "${{ env.PARENT_APP_FILE }}"
+          echo "Parent application applied successfully."
