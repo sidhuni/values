@@ -5,19 +5,17 @@ on:
     branches:
       - main
     paths:
-      # 🌟 SCALABLE FIX: Trigger on any values.yaml file change 🌟
       - '**/values.yaml'
 
 jobs:
   run-chart-update:
     runs-on: self-hosted
     
-    # 🌟 Define environment variables 🌟
+    # 🌟 CORRECT INDENTATION FOR env BLOCK 🌟
     env:
       CHARTMUSEUM_URL: http://192.168.64.2:30080
-      # Use the runner's temporary directory for the cloned ArgoCD repo
+      # Line 19 (Check your file's line numbers): Must use ${{ runner.temp }}
       ARGOCD_LOCAL: ${{ runner.temp }}/argo-apps-clone 
-      # The main repository workspace is where your app folders and parentapp.yaml reside
       REPO_ROOT: ${{ github.workspace }}
       PARENT_APP_FILE: ${{ github.workspace }}/parentapp.yaml
 
