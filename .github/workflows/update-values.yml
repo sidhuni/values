@@ -5,18 +5,15 @@ on:
     branches:
       - main
     paths:
-      # Scalable trigger: Matches changes in any values.yaml file
       - '**/values.yaml'
 
 jobs:
   run-chart-update:
     runs-on: self-hosted
     
-    # Define primary environment variables needed across steps
+    # Define primary fixed environment variables
     env:
       CHARTMUSEUM_URL: http://192.168.64.2:30080
-      # Define base paths using standard contexts
-      ARGOCD_LOCAL: ${{ runner.temp }}/argo-apps-clone 
       REPO_ROOT: ${{ github.workspace }}
       PARENT_APP_FILE: ${{ github.workspace }}/parentapp.yaml
 
@@ -24,21 +21,26 @@ jobs:
       - name: ⬇️ Checkout Source Repository (for template/app folders)
         uses: actions/checkout@v4
         
-      - name: ⬇️ Clone ArgoCD Apps Repository (for application/*.yaml updates)
+      - name: ⬇️ Clone ArgoCD Apps Repository (FIXED PATH)
         shell: bash
         run: |
-          echo "Cloning ArgoCD Apps repo to ${{ env.ARGOCD_LOCAL }}"
+          # 🌟 FIX: Define ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 🌟
+          export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone"
+          
+          echo "Cloning ArgoCD Apps repo to $ARGOCD_LOCAL"
           # NOTE: Replace the URL with your actual ArgoCD repo clone URL
-          git clone --depth 1 https://github.com/sidhuni/argo-apps.git ${{ env.ARGOCD_LOCAL }}
+          git clone --depth 1 https://github.com/sidhuni/argo-apps.git $ARGOCD_LOCAL
           
       - name: 🏃 Run Full Chart Update, Package, and Upload Logic
         shell: bash
         run: |
           set -euo pipefail
           
+          # 🌟 FIX: Re-define ARGOCD_LOCAL in the shell for this step using the $RUNNER_TEMP base
+          export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
+
           echo "--- 1. Discovery and Versioning ---"
           
-          # Find apps, exclude system folders, and sort numerically
           APPS=($(find . -maxdepth 1 -type d ! -name 'template' ! -name '.' ! -name '.*' -exec basename {} \; | sort -V))
           
           TEMPLATE_CHART="./template/Chart.yaml"
@@ -50,11 +52,9 @@ jobs:
               APP_NAME="${APPS[$i]}"
               APP_DIR="./$APP_NAME"
               
-              # Calculate new version
               PATCH=$((BASE_PATCH + i + 1))
               NEW_VERSION="$BASE_MAJOR.$BASE_MINOR.$PATCH"
 
-              # Calculate new chart name
               BASE_CHART_NAME=$(grep "^name:" "$TEMPLATE_CHART" | awk '{print $2}')
               APP_NUMBER=$(echo "$APP_NAME" | grep -o '[0-9]\+' || echo "")
               NEW_CHART_NAME="${BASE_CHART_NAME}${APP_NUMBER}"
@@ -62,11 +62,10 @@ jobs:
               echo "---------------------------------------"
               echo "Processing $APP_NAME, Version: $NEW_VERSION, Chart: $NEW_CHART_NAME"
 
-              # Prepare app folder and update Chart.yaml
               mkdir -p "$APP_DIR/charts"
               cp "$TEMPLATE_CHART" "$APP_DIR/Chart.yaml"
               
-              # 🌟 FIX: Use BSD sed syntax (sed -i '') for Mac self-hosted runner
+              # Use BSD sed syntax (sed -i '')
               sed -i '' "s/^name:.*/name: $NEW_CHART_NAME/" "$APP_DIR/Chart.yaml"
               sed -i '' "s/^version:.*/version: $NEW_VERSION/" "$APP_DIR/Chart.yaml"
 
@@ -83,12 +82,12 @@ jobs:
               cd "${{ env.REPO_ROOT }}" # Return to the root of the source repo
 
               # Update ArgoCD App YAML in the CLONED repo
-              APP_FILE="${{ env.ARGOCD_LOCAL }}/application/$APP_NAME.yaml"
+              APP_FILE="$ARGOCD_LOCAL/application/$APP_NAME.yaml"
               if [ ! -f "$APP_FILE" ]; then
                   echo "❌ Error: ArgoCD app file not found: $APP_FILE"
                   exit 1
               fi
-              # 🌟 FIX: Use BSD sed syntax (sed -i '') for Mac self-hosted runner
+              # Use BSD sed syntax (sed -i '')
               sed -i '' "s/targetRevision:.*/targetRevision: $NEW_VERSION/" "$APP_FILE"
               sed -i '' "s/chart:.*/chart: $NEW_CHART_NAME/" "$APP_FILE"
 
@@ -101,7 +100,9 @@ jobs:
       - name: ⬆️ Commit and Push ArgoCD Changes
         shell: bash
         run: |
-          cd ${{ env.ARGOCD_LOCAL }}
+          # 🌟 FIX: Define ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 🌟
+          export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
+          cd "$ARGOCD_LOCAL"
           
           # Configure Git user for the commit
           git config user.name github-actions
@@ -128,6 +129,5 @@ jobs:
               echo "Parent application applied successfully."
           else
               echo "❌ ERROR: Parent app file not found at ${{ env.PARENT_APP_FILE }}. Skipping kubectl apply."
-              # Since the parent app file should exist in the cloned repo, failure is critical.
               exit 1 
           fi
