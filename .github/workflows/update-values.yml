@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      # These list items must align perfectly
+      # FIX: Use explicit paths for guaranteed triggering
       - 'app1/values.yaml'
       - 'app2/values.yaml'
       - 'app3/values.yaml'
@@ -18,7 +18,7 @@ jobs:
   run-chart-update:
     runs-on: self-hosted
     
-    # Define primary fixed environment variables available to all steps
+    # Define primary fixed environment variables
     env:
       CHARTMUSEUM_URL: http://192.168.64.2:30080
       REPO_ROOT: ${{ github.workspace }}
@@ -28,7 +28,7 @@ jobs:
       - name: ⬇️ Checkout Source Repository (for template/app folders)
         uses: actions/checkout@v4
         
-      - name: ⬇️ Clone ArgoCD Apps Repository (FIXED PATH)
+      - name: ⬇️ Clone ArgoCD Apps Repository
         shell: bash
         run: |
           # Use $RUNNER_TEMP to create a stable, temporary directory for the clone
@@ -48,7 +48,6 @@ jobs:
           
           echo "--- 1. Discovery and Versioning ---"
           
-          # Find apps, exclude system folders, and sort numerically
           APPS=($(find . -maxdepth 1 -type d ! -name 'template' ! -name '.' ! -name '.*' -exec basename {} \; | sort -V))
           
           TEMPLATE_CHART="./template/Chart.yaml"
@@ -108,15 +107,12 @@ jobs:
       - name: ⬆️ Commit and Push ArgoCD Changes
         shell: bash
         run: |
-          # Redefine ARGOCD_LOCAL using the shell environment variable $RUNNER_TEMP 
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
           cd "$ARGOCD_LOCAL"
           
-          # Configure Git user for the commit
           git config user.name github-actions
           git config user.email github-actions@github.com
           
-          # Check for changes and commit/push
           if git diff --exit-code application/*.yaml >/dev/null; then
               echo "No changes detected in ArgoCD application YAMLs. Skipping commit."
           else
@@ -125,6 +121,25 @@ jobs:
               git commit -m "Automated update: Chart versions synced with values change"
               git push
               echo "Pushed updated ArgoCD manifests."
+          fi
+
+      - name: ⬆️ Commit and Push Changes in Values Repository (Source Repo)
+        shell: bash
+        run: |
+          cd ${{ env.REPO_ROOT }}
+          
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          
+          # Check for changes in values.yaml files (usually only metadata or auto-fixes)
+          if git diff --exit-code */values.yaml >/dev/null; then
+              echo "No uncommitted changes in values.yaml files in source repo."
+          else
+              echo "Committing changes to the source repository (values.yaml)..."
+              git add */values.yaml
+              git commit -m "Automated update: Synchronized values.yaml changes."
+              git push
+              echo "Pushed changes to the source repository."
           fi
 
       - name: 🚀 Apply Parent Application (Force Sync on Cluster)
