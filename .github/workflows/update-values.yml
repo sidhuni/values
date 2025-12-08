@@ -7,12 +7,7 @@ on:
     paths:
       # Use an explicit list for guaranteed triggering
       - 'app1/values.yaml'
-      - 'app2/values.yaml'
-      - 'app3/values.yaml'
-      - 'app4/values.yaml'
-      - 'app5/values.yaml'
-      - 'app6/values.yaml'
-      - 'app7/values.yaml'
+      
 
 jobs:
   run-chart-update:
