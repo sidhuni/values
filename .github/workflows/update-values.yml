@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      # Use an explicit list. If this fails, the path is NOT the issue.
+      # Use an explicit list for guaranteed triggering based on confirmed working solution
       - 'app1/values.yaml'
       - 'app2/values.yaml'
       - 'app3/values.yaml'
@@ -16,7 +16,8 @@ on:
 
 jobs:
   run-chart-update:
-    runs-on: self-hosted
+    # Use 'local' if you named your runner 'local', or 'self-hosted' if you didn't
+    runs-on: local 
     
     # Define primary fixed environment variables
     env:
@@ -36,7 +37,10 @@ jobs:
           
           echo "Cloning ArgoCD Apps repo to $ARGOCD_LOCAL"
           # NOTE: Replace the URL with your actual ArgoCD repo clone URL
-          git clone --depth 1 https://github.com/sidhuni/argo-apps.git $ARGOCD_LOCAL
+          if ! git clone --depth 1 https://github.com/sidhuni/argo-apps.git "$ARGOCD_LOCAL"; then
+              echo "❌ ERROR: Failed to clone ArgoCD repository."
+              exit 1
+          fi
           
       - name: 🏃 Run Full Chart Update, Package, and Upload Logic
         shell: bash
@@ -48,12 +52,15 @@ jobs:
           
           echo "--- 1. Discovery and Versioning ---"
           
-          # Find apps, exclude system folders, and sort numerically
           APPS=($(find . -maxdepth 1 -type d ! -name 'template' ! -name '.' ! -name '.*' -exec basename {} \; | sort -V))
           
           TEMPLATE_CHART="./template/Chart.yaml"
           TEMPLATE_VERSION=$(grep "^version:" "$TEMPLATE_CHART" | awk '{print $2}')
-          IFS='.' read -r BASE_MAJOR BASE_MINOR BASE_PATCH <<< "$TEMPLATE_VERSION"
+          
+          # Use printf for safe integer assignment
+          printf -v BASE_MAJOR '%d' "$(echo "$TEMPLATE_VERSION" | cut -d. -f1)"
+          printf -v BASE_MINOR '%d' "$(echo "$TEMPLATE_VERSION" | cut -d. -f2)"
+          printf -v BASE_PATCH '%d' "$(echo "$TEMPLATE_VERSION" | cut -d. -f3)"
 
           # --- 2. Loop Through All Apps and Process ---
           for i in "${!APPS[@]}"; do
@@ -64,7 +71,6 @@ jobs:
               PATCH=$((BASE_PATCH + i + 1))
               NEW_VERSION="$BASE_MAJOR.$BASE_MINOR.$PATCH"
 
-              # Calculate new chart name
               BASE_CHART_NAME=$(grep "^name:" "$TEMPLATE_CHART" | awk '{print $2}')
               APP_NUMBER=$(echo "$APP_NAME" | grep -o '[0-9]\+' || echo "")
               NEW_CHART_NAME="${BASE_CHART_NAME}${APP_NUMBER}"
@@ -80,7 +86,11 @@ jobs:
               sed -i '' "s/^version:.*/version: $NEW_VERSION/" "$APP_DIR/Chart.yaml"
 
               # Build, Package, and Upload
-              cd "$APP_DIR"
+              if ! cd "$APP_DIR"; then
+                  echo "❌ ERROR: Could not change directory to $APP_DIR"
+                  exit 1
+              fi
+
               helm dependency update >/dev/null
               PACKAGE_OUTPUT=$(helm package . --destination .)
               PACKAGE_FILE=$(echo "$PACKAGE_OUTPUT" | awk -F': ' '/Successfully packaged chart/ {print $NF}')
@@ -89,7 +99,10 @@ jobs:
               curl --fail --silent --show-error --data-binary "@$PACKAGE_FILE" "${{ env.CHARTMUSEUM_URL }}/api/charts"
               echo " Upload complete."
 
-              cd "${{ env.REPO_ROOT }}" # Return to the root of the source repo
+              if ! cd "${{ env.REPO_ROOT }}"; then
+                  echo "❌ ERROR: Could not return to repository root."
+                  exit 1
+              fi
 
               # Update ArgoCD App YAML in the CLONED repo
               APP_FILE="$ARGOCD_LOCAL/application/$APP_NAME.yaml"
@@ -101,7 +114,7 @@ jobs:
               sed -i '' "s/targetRevision:.*/targetRevision: $NEW_VERSION/" "$APP_FILE"
               sed -i '' "s/chart:.*/chart: $NEW_CHART_NAME/" "$APP_FILE"
 
-              # Cleanup
+              # Cleanup local chart files
               rm -rf "$APP_DIR/Chart.yaml" "$APP_DIR/Chart.lock" "$APP_DIR/*.tgz" "$APP_DIR/charts"
               
               echo "✅ $APP_NAME processed successfully."
@@ -111,7 +124,10 @@ jobs:
         shell: bash
         run: |
           export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone" 
-          cd "$ARGOCD_LOCAL"
+          if ! cd "$ARGOCD_LOCAL"; then
+              echo "❌ ERROR: Could not change directory to ArgoCD clone."
+              exit 1
+          fi
           
           git config user.name github-actions
           git config user.email github-actions@github.com
@@ -129,12 +145,14 @@ jobs:
       - name: ⬆️ Commit and Push Changes in Values Repository (Source Repo)
         shell: bash
         run: |
-          cd ${{ env.REPO_ROOT }}
+          if ! cd ${{ env.REPO_ROOT }}; then
+              echo "❌ ERROR: Could not change directory to source repo root."
+              exit 1
+          fi
           
           git config user.name github-actions
           git config user.email github-actions@github.com
           
-          # Check for changes in values.yaml files (usually only metadata or auto-fixes)
           if git diff --exit-code */values.yaml >/dev/null; then
               echo "No uncommitted changes in values.yaml files in source repo."
           else
@@ -156,4 +174,13 @@ jobs:
           else
               echo "❌ ERROR: Parent app file not found at ${{ env.PARENT_APP_FILE }}. Skipping kubectl apply."
               exit 1 
+          fi
+
+      - name: 🧹 Cleanup ArgoCD Clone
+        shell: bash
+        run: |
+          export ARGOCD_LOCAL="$RUNNER_TEMP/argo-apps-clone"
+          if [ -d "$ARGOCD_LOCAL" ]; then
+              rm -rf "$ARGOCD_LOCAL"
+              echo "Cleaned up temporary ArgoCD clone."
           fi
