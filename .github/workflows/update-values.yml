@@ -11,7 +11,7 @@ on:
 
 jobs:
   run-chart-update:
-    runs-on: self-hosted
+    runs-on: local
     
     # Define primary fixed environment variables
     env:
