@@ -1,41 +1,91 @@
-name: Deploy Changed Values
+name: Update Changed Apps
 
 on:
   push:
     paths:
       - '**/values.yaml'
-  workflow_dispatch:
 
 jobs:
-  deploy-changed-values:
-    runs-on: ubuntu-latest
+  update-apps:
+    runs-on: self-hosted, local-runner
 
     steps:
-      - name: Checkout repository
+      # 1️⃣ Checkout the repository containing values.yaml
+      - name: Checkout values repo
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          persist-credentials: true
 
+      # 2️⃣ Detect which values.yaml files changed
       - name: Detect changed apps
-        id: detect
+        id: changed
         run: |
-          CHANGED_APPS=()
-          for file in $(git diff --name-only ${{ github.event.before }} ${{ github.sha }}); do
-            if [[ "$file" == */values.yaml ]]; then
-              APP_NAME=$(dirname "$file")
-              CHANGED_APPS+=("$APP_NAME")
-            fi
-          done
-          # Remove duplicates
-          CHANGED_APPS=($(echo "${CHANGED_APPS[@]}" | tr ' ' '\n' | sort -u))
-          echo "Changed apps: ${CHANGED_APPS[*]}"
-          echo "apps=${CHANGED_APPS[*]}" >> $GITHUB_OUTPUT
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep 'values.yaml' || true)
+          echo "Changed files: $CHANGED_FILES"
+          APPS=$(echo "$CHANGED_FILES" | awk -F/ '{print $1}' | sort | uniq | tr '\n' ',' | sed 's/,$//')
+          echo "apps=$APPS" >> $GITHUB_OUTPUT
 
-      - name: Deploy changed apps
-        if: steps.detect.outputs.apps != ''
+      # 3️⃣ Setup Helm
+      - name: Setup Helm
+        uses: azure/setup-helm@v3
+
+      # 4️⃣ Loop through changed apps
+      - name: Process changed apps
+        if: steps.changed.outputs.apps != ''
         run: |
-          for app in ${{ steps.detect.outputs.apps }}; do
-            echo "Deploying $app..."
-            # Put your deployment commands here
-            # e.g., update ArgoCD app, Helm upgrade, ChartMuseum push
+          CHANGED_APPS=${{ steps.changed.outputs.apps }}
+          IFS=',' read -ra APP_ARRAY <<< "$CHANGED_APPS"
+
+          TEMPLATE_CHART="./template/Chart.yaml"
+          CHARTMUSEUM_URL="http://192.168.64.2:30080"
+          ARGOCD_LOCAL="$HOME/argo-apps"
+
+          for APP in "${APP_ARRAY[@]}"; do
+            echo "Processing $APP..."
+
+            APP_DIR="./$APP"
+            TEMPLATE_VERSION=$(grep "^version:" "$TEMPLATE_CHART" | awk '{print $2}')
+            IFS='.' read -r BASE_MAJOR BASE_MINOR BASE_PATCH <<< "$TEMPLATE_VERSION"
+            PATCH=$((BASE_PATCH + 1))  # Increment patch for changed app
+            NEW_VERSION="$BASE_MAJOR.$BASE_MINOR.$PATCH"
+
+            BASE_CHART_NAME=$(grep "^name:" "$TEMPLATE_CHART" | awk '{print $2}')
+            APP_NUMBER=$(echo "$APP" | grep -o '[0-9]\+' || echo "")
+            NEW_CHART_NAME="${BASE_CHART_NAME}${APP_NUMBER}"
+
+            # Update Chart.yaml
+            cp "$TEMPLATE_CHART" "$APP_DIR/Chart.yaml"
+            sed -i "s/^name:.*/name: $NEW_CHART_NAME/" "$APP_DIR/Chart.yaml"
+            sed -i "s/^version:.*/version: $NEW_VERSION/" "$APP_DIR/Chart.yaml"
+
+            # Build dependencies
+            cd "$APP_DIR"
+            helm dependency update
+            cd - >/dev/null
+
+            # Package chart
+            PACKAGE_FILE=$(helm package "$APP_DIR" --destination "$APP_DIR" | awk -F': ' '/Successfully packaged chart/ {print $NF}')
+            echo "Packaged chart: $PACKAGE_FILE"
+
+            # Upload to ChartMuseum
+            curl --fail --silent --show-error --data-binary "@$PACKAGE_FILE" "$CHARTMUSEUM_URL/api/charts"
+            echo "Uploaded $PACKAGE_FILE to ChartMuseum"
+
+            # Update ArgoCD app YAML
+            APP_FILE="$ARGOCD_LOCAL/application/$APP.yaml"
+            sed -i "s/targetRevision:.*/targetRevision: $NEW_VERSION/" "$APP_FILE"
+            sed -i "s/chart:.*/chart: $NEW_CHART_NAME/" "$APP_FILE"
+
+            # Commit & push ArgoCD changes
+            cd "$ARGOCD_LOCAL"
+            git add "$APP_FILE"
+            git commit -m "Automated update: $APP version $NEW_VERSION" || echo "No changes to commit"
+            git push
+            cd - >/dev/null
+
+            # Cleanup
+            rm -f "$APP_DIR/Chart.yaml" "$PACKAGE_FILE"
+            rm -rf "$APP_DIR/charts"
+
+            echo "✅ $APP updated successfully!"
           done
