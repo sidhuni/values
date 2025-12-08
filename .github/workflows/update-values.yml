@@ -5,9 +5,14 @@ on:
     branches:
       - main
     paths:
-      # 🌟 TEMPORARY FIX: Restrict to app1 for initial testing. 
-      # Change back to '*/values.yaml' or the full list once app1 is verified.
-      - 'app1/values.yaml' 
+      # Use an explicit list. If this fails, the path is NOT the issue.
+      - 'app1/values.yaml'
+      - 'app2/values.yaml'
+      - 'app3/values.yaml'
+      - 'app4/values.yaml'
+      - 'app5/values.yaml'
+      - 'app6/values.yaml'
+      - 'app7/values.yaml'
 
 jobs:
   run-chart-update:
