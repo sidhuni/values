@@ -27,7 +27,7 @@ your-chart:
     enabled: true
     minReplicas: 2
     maxReplicas: 3
-    targetCPUUtilizationPercentage: 50
+    targetCPUUtilizationPercentage: 60
 
   readiness:
     initialDelaySeconds: 5
